@@ -281,7 +281,7 @@ function bauItem(idx){
     spkBtn.className="diktat-btn"+(spIdx===idx?" on":"");
     spkBtn.textContent=spIdx===idx?"⏹ Stopp":"🎤 Sprechen";
     (function(i){
-      function doSpeak(e){e.preventDefault();toggleSprache(i,spkBtn);}
+      function doSpeak(e){e.preventDefault();toggleSprache(i);}
       spkBtn.addEventListener("click",doSpeak,false);
       spkBtn.addEventListener("touchend",doSpeak,false);
     })(idx);
@@ -340,31 +340,54 @@ function bauItem(idx){
 
 function renderItem(idx){var alt=document.getElementById("item-"+idx);if(alt)alt.parentNode.replaceChild(bauItem(idx),alt);}
 
-function toggleSprache(idx,btn){
-  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR)return;
+function toggleSprache(idx){
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){alert("Spracherkennung wird auf diesem Gerät nicht unterstützt.");return;}
+  // Läuft gerade -> stoppen
+  if(spRec&&spIdx===idx){
+    try{spRec.stop();}catch(e){}
+    spRec=null;spIdx=-1;renderItem(idx);return;
+  }
+  // Neu starten
   if(spRec){try{spRec.stop();}catch(e){}spRec=null;}
-  if(spIdx===idx){spIdx=-1;renderItem(idx);return;}
   spIdx=idx;renderItem(idx);
   var rec=new SR();
   rec.lang="de-DE";
-  rec.continuous=true;
+  rec.continuous=false;
   rec.interimResults=false;
-  rec.maxAlternatives=1;
+  rec.maxAlternatives=3;
   spRec=rec;
-  var got=false;
   rec.onresult=function(e){
-    var t="";
-    for(var i=e.resultIndex;i<e.results.length;i++){
-      if(e.results[i].isFinal){t+=e.results[i][0].transcript+" ";}
+    var best="";
+    for(var i=0;i<e.results.length;i++){
+      for(var j=0;j<e.results[i].length;j++){
+        if(e.results[i][j].transcript.length>best.length){
+          best=e.results[i][j].transcript;
+        }
+      }
     }
-    t=t.trim();
-    if(t){got=true;pos[idx].m=pos[idx].m?pos[idx].m+" "+t:t;renderItem(idx);}
+    best=best.trim();
+    if(best){
+      pos[idx].m=pos[idx].m?pos[idx].m+" "+best:best;
+    }
+    spIdx=-1;spRec=null;renderItem(idx);
   };
-  rec.onerror=function(e){console.log("SR error:",e.error);spIdx=-1;spRec=null;renderItem(idx);};
+  rec.onspeechend=function(){
+    try{rec.stop();}catch(e){}
+  };
+  rec.onerror=function(e){
+    if(e.error!=="no-speech"&&e.error!=="aborted"){
+      alert("Mikrofon Fehler: "+e.error);
+    }
+    spIdx=-1;spRec=null;renderItem(idx);
+  };
   rec.onend=function(){
     if(spIdx===idx){spIdx=-1;spRec=null;renderItem(idx);}
   };
-  try{rec.start();}catch(e){spIdx=-1;spRec=null;renderItem(idx);}
+  try{rec.start();}catch(e){
+    alert("Mikrofon konnte nicht gestartet werden: "+e.message);
+    spIdx=-1;spRec=null;renderItem(idx);
+  }
 }
 
 function posHinzu(){pos.push({t:"",b:null,m:"",f:[]});renderListe();setTimeout(function(){var items=document.querySelectorAll(".pitem");if(items.length)items[items.length-1].scrollIntoView({behavior:"smooth",block:"center"});},60);}
